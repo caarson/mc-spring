@@ -1,0 +1,36 @@
+{
+  "enabled": true,
+  "locale": "en-US",
+  "worlds": {
+    "mode": "whitelist",
+    "list": ["world", "nether"]
+  },
+  "region": {
+    "requireBounceFlag": true,
+    "allowRegionBypassPermission": false
+  },
+  "safety": {
+    "enabled": true,
+    "timeoutTicks": 20
+  },
+  "placeholderapi": {
+    "topSize": 10,
+    "weekStart": "Monday",
+    "timezone": "America/Los_Angeles"
+  },
+  "levels": [
+    {
+      "name": "gentle",
+      "verticalVelocity": 0.5,
+      "horizontalMultiplier": 0.3,
+      "anglePreservation": true
+    }
+  ],
+  "materials": ["SLIME_BLOCK"],
+  "bounceChains": {
+    "SLIME_BLOCK": [0, 1, 2]
+  },
+  "debug": {
+    "loggingEnabled": false
+  }
+}
