@@ -20,6 +20,27 @@ public class ConfigManager {
     }
     
     private void validateConfig() {
-        // Validate levels/materials/chains on load - empty stub for now
+        // Validate levels
+        if (config.getList("levels") == null || config.getList("levels").isEmpty()) {
+            throw new IllegalArgumentException("Levels list cannot be empty");
+        }
+        
+        // Validate materials
+        List<String> materials = config.getStringList("materials");
+        if (materials == null || materials.isEmpty()) {
+            throw new IllegalArgumentException("Materials list cannot be empty");
+        }
+        
+        // Validate bounce chains for each material
+        Map<String, List<Integer>> bounceChains = config.getMap("bounceChains");
+        for (String material : materials) {
+            if (!bounceChains.containsKey(material)) {
+                throw new IllegalArgumentException("Bounce chain for material " + material + " not found");
+            }
+            List<Integer> chain = bounceChains.get(material);
+            if (chain.size() != config.getList("levels").size()) {
+                throw new IllegalArgumentException("Chain length must match levels count for material " + material);
+            }
+        }
     }
 }
