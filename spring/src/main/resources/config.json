@@ -24,6 +24,18 @@
       "verticalVelocity": 0.5,
       "horizontalMultiplier": 0.3,
       "anglePreservation": true
+    },
+    {
+      "name": "springy",
+      "verticalVelocity": 1.0,
+      "horizontalMultiplier": 0.6,
+      "anglePreservation": true
+    },
+    {
+      "name": "rocket",
+      "verticalVelocity": 2.0,
+      "horizontalMultiplier": 1.0,
+      "anglePreservation": false
     }
   ],
   "materials": ["SLIME_BLOCK"],

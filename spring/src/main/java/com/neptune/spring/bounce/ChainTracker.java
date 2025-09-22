@@ -4,17 +4,40 @@ import org.bukkit.entity.Player;
 import java.util.*;
 
 public class ChainTracker {
-    private final Map<Player, String> playerMaterialMap; // Player to current material
-    private final Map<Player, Integer> playerChainIndexMap; // Player to current chain index
+    private final Map<UUID, Map<String, Integer>> playerChains = new HashMap<>();
+    private final Map<UUID, String> currentMaterial = new HashMap<>();
     
-    public ChainTracker() {
-        playerMaterialMap = new HashMap<>();
-        playerChainIndexMap = new HashMap<>();
+    public int getChainLevel(Player player, String materialName) {
+        UUID playerId = player.getUniqueId();
+        Map<String, Integer> chains = playerChains.get(playerId);
+        
+        if (chains == null || !materialName.equals(currentMaterial.get(playerId))) {
+            // Reset chain if material changed
+            resetChain(player);
+            chains = playerChains.get(playerId);
+        }
+        
+        return chains.getOrDefault(materialName, 0);
     }
     
-    public void update(Player player, String material) {
-        playerMaterialMap.put(player, material);
-        // Update chain index based on material
-        // Reset if step off or change block
+    public void update(Player player, String materialName) {
+        UUID playerId = player.getUniqueId();
+        Map<String, Integer> chains = playerChains.computeIfAbsent(playerId, k -> new HashMap<>());
+        
+        // Reset chain if material changed
+        if (!materialName.equals(currentMaterial.get(playerId))) {
+            chains.put(materialName, 0);
+            currentMaterial.put(playerId, materialName);
+        }
+        
+        // Increment chain level
+        int currentLevel = chains.getOrDefault(materialName, 0);
+        chains.put(materialName, currentLevel + 1);
+    }
+    
+    public void resetChain(Player player) {
+        UUID playerId = player.getUniqueId();
+        playerChains.remove(playerId);
+        currentMaterial.remove(playerId);
     }
 }

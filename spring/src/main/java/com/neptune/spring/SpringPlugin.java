@@ -16,7 +16,7 @@ public class SpringPlugin extends JavaPlugin {
         configManager = new ConfigManager(this);
         
         // Register command
-        getCommand("spring").setExecutor(new SpringCommand());
+        getCommand("spring").setExecutor(new SpringCommand(configManager));
         
         // Setup hooks for optional dependencies (WorldGuard, LuckPerms)
         if (WorldGuardHook.isAvailable()) {
@@ -27,10 +27,12 @@ public class SpringPlugin extends JavaPlugin {
         }
         
         // Register BounceService as listener
-        getServer().getPluginManager().registerEvents(new BounceService(), this);
+        getServer().getPluginManager().registerEvents(new BounceService(configManager), this);
         
         // Register SafeLandingService as listener
-        getServer().getPluginManager().registerEvents(new SafeLandingService(), this);
+        SafeLandingService safeLandingService = new SafeLandingService();
+        safeLandingService.setPlugin(this);
+        getServer().getPluginManager().registerEvents(safeLandingService, this);
     }
 
     @Override

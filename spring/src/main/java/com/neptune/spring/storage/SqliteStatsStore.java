@@ -4,6 +4,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.entity.Player;
 
 public class SqliteStatsStore implements StatsStore {
     private final Plugin plugin;
