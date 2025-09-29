@@ -43,6 +43,6 @@
     "SLIME_BLOCK": [0, 1, 2]
   },
   "debug": {
-    "loggingEnabled": false
+    "loggingEnabled": true
   }
 }

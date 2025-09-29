@@ -106,6 +106,11 @@ public class ConfigManager {
         return safety != null ? (int) safety.getOrDefault("timeoutTicks", 20) : 20;
     }
     
+    public boolean getDebugLoggingEnabled() {
+        Map<String, Object> debug = (Map<String, Object>) configData.get("debug");
+        return debug != null ? (boolean) debug.getOrDefault("loggingEnabled", false) : false;
+    }
+    
     public String getListStatus() {
         StringBuilder status = new StringBuilder();
         status.append("=== Spring Plugin Status ===\n");
@@ -114,6 +119,7 @@ public class ConfigManager {
         status.append("Levels: ").append(getLevels().size()).append("\n");
         status.append("Worlds Mode: ").append(getWorldsConfig().get("mode")).append("\n");
         status.append("Worlds List: ").append(getWorldsConfig().get("list")).append("\n");
+        status.append("Debug Logging: ").append(getDebugLoggingEnabled()).append("\n");
         return status.toString();
     }
 }

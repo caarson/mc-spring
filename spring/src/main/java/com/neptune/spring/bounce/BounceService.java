@@ -34,8 +34,8 @@ public class BounceService implements Listener {
         Player player = event.getPlayer();
         Block blockUnderFeet = player.getLocation().subtract(0, 1, 0).getBlock();
         
-        // Check if player is on ground and moving
-        if (!player.isOnGround() || event.getFrom().distanceSquared(event.getTo()) < 0.01) {
+        // Check if player is on ground - remove distance check to make bounce more responsive
+        if (!player.isOnGround()) {
             return;
         }
         
@@ -57,7 +57,7 @@ public class BounceService implements Listener {
             double horizontalMultiplier = (double) level.get("horizontalMultiplier");
             boolean anglePreservation = (boolean) level.get("anglePreservation");
             
-            // Calculate bounce velocity
+            // Calculate bounce velocity - use absolute values to ensure consistent bounce
             Vector velocity = player.getVelocity();
             Vector newVelocity = new Vector(
                 velocity.getX() * horizontalMultiplier,
@@ -81,6 +81,11 @@ public class BounceService implements Listener {
             
             // Update chain level
             chainTracker.update(player, materialName);
+            
+            // Debug logging
+            if (configManager.getDebugLoggingEnabled()) {
+                player.sendMessage("§aBounce! Level: " + chainLevel + ", Material: " + materialName + ", Velocity: " + verticalVelocity);
+            }
         } else {
             // Reset chain if player steps off bounce material
             chainTracker.resetChain(player);
