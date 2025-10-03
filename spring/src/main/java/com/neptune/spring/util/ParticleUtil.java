@@ -14,4 +14,14 @@ public class ParticleUtil {
         Location location = player.getLocation();
         player.getWorld().spawnParticle(particle, location.add(0, 0.5, 0), count, offsetX, offsetY, offsetZ, speed);
     }
+    
+    public static void playCustomParticles(Player player, String particleType, int count) {
+        try {
+            Particle particle = Particle.valueOf(particleType.toUpperCase().replace("MINECRAFT:", ""));
+            playParticles(player, particle, count, 0.5, 0.5, 0.5, 0.1);
+        } catch (IllegalArgumentException e) {
+            // Fallback to default particle
+            playParticles(player, Particle.ITEM_SLIME, count, 0.5, 0.5, 0.5, 0.1);
+        }
+    }
 }

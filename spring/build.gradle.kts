@@ -1,6 +1,6 @@
 plugins {
     id("java")
-    id("com.github.johnrengelman.shadow") version "7.1.2"
+    id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
 group = "com.neptune"
@@ -15,7 +15,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.1-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT")
     // Optional dependencies for hooks
     compileOnly("me.clip:placeholderapi:2.11.5")
     compileOnly("com.sk89q.worldguard:worldguard-bukkit:7.0.9")
@@ -31,14 +31,12 @@ tasks {
         targetCompatibility = "21"
     }
     
-    shadowJar {
+    jar {
         archiveBaseName.set("Spring")
         archiveClassifier.set("")
-        relocate("com.fasterxml.jackson", "com.neptune.spring.lib.jackson")
-        relocate("org.xerial.sqlite", "com.neptune.spring.lib.sqlite")
     }
     
     build {
-        dependsOn(shadowJar)
+        dependsOn(jar)
     }
 }

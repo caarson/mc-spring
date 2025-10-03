@@ -34,30 +34,48 @@ public class BounceService implements Listener {
         Player player = event.getPlayer();
         Block blockUnderFeet = player.getLocation().subtract(0, 1, 0).getBlock();
         
-        // Check if player is on ground - remove distance check to make bounce more responsive
-        if (!player.isOnGround()) {
+        // Check if player is on ground and moving downward to trigger bounce
+        if (!player.isOnGround() || player.getVelocity().getY() >= 0) {
             return;
         }
         
         String materialName = blockUnderFeet.getType().name();
-        List<String> materials = configManager.getMaterialsList();
+        List<Map<String, Object>> materials = configManager.getMaterialsList();
         
-        if (materials.contains(materialName)) {
+        // Find if the material is configured
+        String configuredMaterial = null;
+        for (Map<String, Object> materialConfig : materials) {
+            if (materialConfig.get("material").equals(materialName)) {
+                configuredMaterial = materialName;
+                break;
+            }
+        }
+        
+        if (configuredMaterial != null) {
             // Get current chain level for this material
-            int chainLevel = chainTracker.getChainLevel(player, materialName);
-            List<Map<String, Object>> levels = configManager.getLevels();
-            Map<String, List<Integer>> bounceChains = configManager.getBounceChains();
+            int chainLevel = chainTracker.getChainLevel(player, configuredMaterial);
+            Map<String, Map<String, Object>> levels = configManager.getLevels();
+            Map<String, List<String>> bounceChains = configManager.getBounceChains();
             
-            if (chainLevel >= levels.size()) {
-                chainLevel = levels.size() - 1; // Cap at max level
+            // Get the chain for this material
+            List<String> chain = bounceChains.get(configuredMaterial);
+            if (chain == null || chain.isEmpty()) {
+                return;
             }
             
-            Map<String, Object> level = levels.get(chainLevel);
+            // Get the level name for current chain position
+            String levelName = chain.get(chainLevel % chain.size());
+            Map<String, Object> level = levels.get(levelName);
+            
+            if (level == null) {
+                return;
+            }
+            
             double verticalVelocity = (double) level.get("verticalVelocity");
             double horizontalMultiplier = (double) level.get("horizontalMultiplier");
             boolean anglePreservation = (boolean) level.get("anglePreservation");
             
-            // Calculate bounce velocity - use absolute values to ensure consistent bounce
+            // Calculate bounce velocity
             Vector velocity = player.getVelocity();
             Vector newVelocity = new Vector(
                 velocity.getX() * horizontalMultiplier,
@@ -74,17 +92,34 @@ public class BounceService implements Listener {
             player.setVelocity(newVelocity);
             
             // Play particles
-            ParticleUtil.playParticles(player, Particle.SPLASH);
+            try {
+                String particleType = (String) ((Map<String, Object>) level.get("particles")).get("type");
+                int particleCount = (int) ((Map<String, Object>) level.get("particles")).get("count");
+                ParticleUtil.playCustomParticles(player, particleType, particleCount);
+            } catch (Exception e) {
+                ParticleUtil.playParticles(player, Particle.ITEM_SLIME);
+            }
+            
+            // Play sound
+            try {
+                String sound = (String) level.get("sound");
+                float volume = ((Number) level.get("soundVolume")).floatValue();
+                float pitch = ((Number) level.get("soundPitch")).floatValue();
+                player.getWorld().playSound(player.getLocation(), sound, volume, pitch);
+            } catch (Exception e) {
+                // Use default sound if specified sound fails
+                player.getWorld().playSound(player.getLocation(), "block.slime_block.place", 1.0f, 1.2f);
+            }
             
             // Activate safe landing
             safeLandingService.activateSafeLanding(player, configManager.getSafetyTimeoutTicks());
             
             // Update chain level
-            chainTracker.update(player, materialName);
+            chainTracker.update(player, configuredMaterial);
             
             // Debug logging
             if (configManager.getDebugLoggingEnabled()) {
-                player.sendMessage("§aBounce! Level: " + chainLevel + ", Material: " + materialName + ", Velocity: " + verticalVelocity);
+                player.sendMessage("§aBounce! Level: " + levelName + ", Material: " + configuredMaterial + ", Velocity: " + verticalVelocity);
             }
         } else {
             // Reset chain if player steps off bounce material

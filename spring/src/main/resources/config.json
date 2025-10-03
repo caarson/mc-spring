@@ -1,48 +1,75 @@
 {
   "enabled": true,
-  "locale": "en-US",
+  "locale": "en_US",
   "worlds": {
     "mode": "whitelist",
-    "list": ["world", "nether"]
+    "list": ["spawn", "minigames"]
   },
   "region": {
     "requireBounceFlag": true,
     "allowRegionBypassPermission": false
   },
   "safety": {
-    "enabled": true,
-    "timeoutTicks": 20
+    "cancelFallDamage": true,
+    "safeLandingMode": {
+      "enabled": true,
+      "timeoutTicks": 60
+    }
   },
   "placeholderapi": {
-    "topSize": 10,
-    "weekStart": "Monday",
-    "timezone": "America/Los_Angeles"
-  },
-  "levels": [
-    {
-      "name": "gentle",
-      "verticalVelocity": 0.5,
-      "horizontalMultiplier": 0.3,
-      "anglePreservation": true
-    },
-    {
-      "name": "springy",
-      "verticalVelocity": 1.0,
-      "horizontalMultiplier": 0.6,
-      "anglePreservation": true
-    },
-    {
-      "name": "rocket",
-      "verticalVelocity": 2.0,
-      "horizontalMultiplier": 1.0,
-      "anglePreservation": false
+    "enabled": true,
+    "leaderboards": {
+      "track": true,
+      "topSize": 5,
+      "weekStartsOn": "MONDAY",
+      "timezone": "America/New_York",
+      "storage": {
+        "type": "sqlite",
+        "sqliteFile": "plugins/Spring/spring.db",
+        "jsonFile": "plugins/Spring/stats.json"
+      }
     }
+  },
+  "levels": {
+    "gentle": {
+      "verticalVelocity": 0.9,
+      "horizontalMultiplier": 1.0,
+      "anglePreservation": true,
+      "sound": "minecraft:block.slime_block.place",
+      "soundVolume": 1.0,
+      "soundPitch": 1.2,
+      "particles": { "type": "minecraft:poof", "count": 10, "offset": [0.3, 0.1, 0.3] }
+    },
+    "springy": {
+      "verticalVelocity": 1.4,
+      "horizontalMultiplier": 1.1,
+      "anglePreservation": true,
+      "sound": "minecraft:block.honey_block.slide",
+      "soundVolume": 1.0,
+      "soundPitch": 0.9,
+      "particles": { "type": "minecraft:slime", "count": 12, "offset": [0.4, 0.15, 0.4] }
+    },
+    "rocket": {
+      "verticalVelocity": 2.2,
+      "horizontalMultiplier": 0.0,
+      "anglePreservation": false,
+      "sound": "minecraft:entity.firework_rocket.launch",
+      "soundVolume": 1.0,
+      "soundPitch": 1.0,
+      "particles": { "type": "minecraft:firework", "count": 6, "offset": [0.0, 0.2, 0.0] }
+    }
+  },
+  "materials": [
+    { "material": "SLIME_BLOCK", "level": "springy" },
+    { "material": "HONEY_BLOCK", "level": "gentle" },
+    { "material": "STONE", "level": "rocket" }
   ],
-  "materials": ["SLIME_BLOCK"],
   "bounceChains": {
-    "SLIME_BLOCK": [0, 1, 2]
+    "SLIME_BLOCK": ["gentle", "springy", "rocket"],
+    "HONEY_BLOCK": ["gentle", "springy"]
   },
   "debug": {
-    "loggingEnabled": true
+    "logStartupSummary": true,
+    "logValidationErrors": true
   }
 }

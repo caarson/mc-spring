@@ -13,17 +13,28 @@ public class SpringPlugin extends JavaPlugin {
     
     @Override
     public void onEnable() {
+        // Initialize config manager first
         configManager = new ConfigManager(this);
         
         // Register command
         getCommand("spring").setExecutor(new SpringCommand(configManager));
         
         // Setup hooks for optional dependencies (WorldGuard, LuckPerms)
-        if (WorldGuardHook.isAvailable()) {
-            new WorldGuardHook(this);
+        // Use try-catch to handle missing optional dependencies gracefully
+        try {
+            if (WorldGuardHook.isAvailable()) {
+                new WorldGuardHook(this);
+            }
+        } catch (NoClassDefFoundError e) {
+            getLogger().warning("WorldGuard not found, skipping integration");
         }
-        if (LuckPermsHook.isAvailable()) {
-            new LuckPermsHook(this);
+        
+        try {
+            if (LuckPermsHook.isAvailable()) {
+                new LuckPermsHook(this);
+            }
+        } catch (NoClassDefFoundError e) {
+            getLogger().warning("LuckPerms not found, skipping integration");
         }
         
         // Register BounceService as listener

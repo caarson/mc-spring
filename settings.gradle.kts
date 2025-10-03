@@ -12,3 +12,4 @@ plugins {
 
 rootProject.name = "mc-spring"
 include("lib")
+include("spring")
