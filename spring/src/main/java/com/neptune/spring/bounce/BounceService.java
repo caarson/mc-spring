@@ -20,11 +20,13 @@ public class BounceService implements Listener {
     private ConfigManager configManager;
     private SafeLandingService safeLandingService;
     private ChainTracker chainTracker;
+    private com.neptune.spring.storage.StatsStore statsStore;
     
-    public BounceService(ConfigManager configManager) {
+    public BounceService(ConfigManager configManager, SafeLandingService safeLandingService, com.neptune.spring.storage.StatsStore statsStore) {
         this.configManager = configManager;
-        this.safeLandingService = new SafeLandingService();
+        this.safeLandingService = safeLandingService;
         this.chainTracker = new ChainTracker();
+        this.statsStore = statsStore;
     }
     
     @EventHandler
@@ -74,20 +76,39 @@ public class BounceService implements Listener {
             double verticalVelocity = (double) level.get("verticalVelocity");
             double horizontalMultiplier = (double) level.get("horizontalMultiplier");
             boolean anglePreservation = (boolean) level.get("anglePreservation");
-            
+
             // Calculate bounce velocity
             Vector velocity = player.getVelocity();
-            Vector newVelocity = new Vector(
-                velocity.getX() * horizontalMultiplier,
-                verticalVelocity,
-                velocity.getZ() * horizontalMultiplier
-            );
-            
-            // Preserve incoming horizontal vector if anglePreservation is true
-            if (anglePreservation) {
-                newVelocity.setX(velocity.getX());
-                newVelocity.setZ(velocity.getZ());
+
+            // Compute incoming horizontal magnitude
+            double incomingHX = velocity.getX();
+            double incomingHZ = velocity.getZ();
+            double incomingHorizontalMagnitude = Math.sqrt(incomingHX * incomingHX + incomingHZ * incomingHZ);
+
+            // Determine target horizontal magnitude. If incoming is zero, treat horizontalMultiplier as absolute speed.
+            double targetHorizontalMagnitude = incomingHorizontalMagnitude * horizontalMultiplier;
+            if (incomingHorizontalMagnitude == 0.0) {
+                targetHorizontalMagnitude = horizontalMultiplier;
             }
+
+            Vector newHorizontal = new Vector(0, 0, 0);
+
+            if (anglePreservation && incomingHorizontalMagnitude > 0.0) {
+                // Preserve the incoming horizontal direction, scale magnitude
+                newHorizontal = new Vector(incomingHX, 0, incomingHZ).normalize().multiply(targetHorizontalMagnitude);
+            } else {
+                // Align horizontal to player's look direction (xz) and apply magnitude
+                Vector look = player.getLocation().getDirection();
+                Vector lookHoriz = new Vector(look.getX(), 0, look.getZ());
+                if (lookHoriz.length() > 0.0) {
+                    newHorizontal = lookHoriz.normalize().multiply(targetHorizontalMagnitude);
+                } else if (incomingHorizontalMagnitude > 0.0) {
+                    // fallback to incoming direction if look has no horizontal component
+                    newHorizontal = new Vector(incomingHX, 0, incomingHZ).normalize().multiply(targetHorizontalMagnitude);
+                }
+            }
+
+            Vector newVelocity = new Vector(newHorizontal.getX(), verticalVelocity, newHorizontal.getZ());
             
             player.setVelocity(newVelocity);
             
@@ -113,6 +134,13 @@ public class BounceService implements Listener {
             
             // Activate safe landing
             safeLandingService.activateSafeLanding(player, configManager.getSafetyTimeoutTicks());
+
+            // Record bounce in stats store if available
+            try {
+                if (statsStore != null) {
+                    statsStore.incrementBounce(player.getUniqueId(), player.getName());
+                }
+            } catch (Exception ignored) {}
             
             // Update chain level
             chainTracker.update(player, configuredMaterial);

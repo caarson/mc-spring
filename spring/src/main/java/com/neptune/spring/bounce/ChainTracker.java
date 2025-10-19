@@ -11,10 +11,20 @@ public class ChainTracker {
         UUID playerId = player.getUniqueId();
         Map<String, Integer> chains = playerChains.get(playerId);
         
-        if (chains == null || !materialName.equals(currentMaterial.get(playerId))) {
+        // Ensure chains is never null
+        if (chains == null) {
+            chains = playerChains.computeIfAbsent(playerId, k -> new HashMap<>());
+        }
+        
+        if (!materialName.equals(currentMaterial.get(playerId))) {
             // Reset chain if material changed
             resetChain(player);
-            chains = playerChains.get(playerId);
+            chains = playerChains.computeIfAbsent(playerId, k -> new HashMap<>());
+        }
+        
+        // Final null check to be safe
+        if (chains == null) {
+            return 0;
         }
         
         return chains.getOrDefault(materialName, 0);
