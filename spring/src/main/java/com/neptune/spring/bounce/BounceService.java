@@ -15,12 +15,15 @@ import com.neptune.spring.bounce.ChainTracker;
 import com.neptune.spring.util.ParticleUtil;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
+import java.util.UUID;
 
 public class BounceService implements Listener {
     private ConfigManager configManager;
     private SafeLandingService safeLandingService;
     private ChainTracker chainTracker;
     private com.neptune.spring.storage.StatsStore statsStore;
+    private Map<UUID, Double> previousYVelocity = new HashMap<>();
     
     public BounceService(ConfigManager configManager, SafeLandingService safeLandingService, com.neptune.spring.storage.StatsStore statsStore) {
         this.configManager = configManager;
@@ -34,10 +37,23 @@ public class BounceService implements Listener {
         if (!configManager.isEnabled()) return;
         
         Player player = event.getPlayer();
+        UUID playerId = player.getUniqueId();
         Block blockUnderFeet = player.getLocation().subtract(0, 1, 0).getBlock();
         
-        // Check if player is on ground and moving downward to trigger bounce
-        if (!player.isOnGround() || player.getVelocity().getY() >= 0) {
+        // Get current and previous Y velocity
+        double currentYVel = player.getVelocity().getY();
+        Double prevYVel = previousYVelocity.get(playerId);
+        
+        // Update tracked velocity for next event
+        previousYVelocity.put(playerId, currentYVel);
+        
+        // Only trigger bounce if:
+        // 1. Player just landed (was falling/not on ground before, now on ground)
+        // 2. Previous Y velocity was negative (falling)
+        // 3. Current Y velocity is near zero or negative (just landed, not already bouncing up)
+        boolean justLanded = player.isOnGround() && prevYVel != null && prevYVel < -0.1 && currentYVel < 0.5;
+        
+        if (!justLanded) {
             return;
         }
         
