@@ -55,11 +55,14 @@ public class ConfigManager {
         // Validate config but catch any exceptions to prevent plugin disablement
         try {
             validateConfig();
+            ensureBounceChainsPresent();
         } catch (Exception e) {
             plugin.getLogger().severe("Config validation failed: " + e.getMessage());
             plugin.getLogger().severe("Using default configuration instead");
             // Set default values to prevent plugin disablement
             setDefaultConfig();
+            // Defaults may still miss bounce chains; ensure now
+            ensureBounceChainsPresent();
         }
     }
 
@@ -188,6 +191,49 @@ public class ConfigManager {
         loadConfig();
     }
 
+    /**
+     * Normalize a configured material string into a Bukkit Material key form (uppercase enum name).
+     * Accepts forms like "tuff", "minecraft:tuff", and "TUFF".
+     */
+    public static String normalizeMaterialKey(String raw) {
+        if (raw == null) return null;
+        String v = raw.trim();
+        int colon = v.indexOf(':');
+        if (colon >= 0 && colon < v.length() - 1) {
+            v = v.substring(colon + 1);
+        }
+        v = v.replace('-', '_');
+        return v.toUpperCase(Locale.ROOT);
+    }
+
+    /**
+     * Ensure every material listed has a bounce chain. If absent, create a single-step chain
+     * using that material's initial level so materials like TUFF start working immediately.
+     */
+    @SuppressWarnings("unchecked")
+    private void ensureBounceChainsPresent() {
+        if (configData == null) return;
+        List<Map<String, Object>> materials = (List<Map<String, Object>>) configData.get("materials");
+        if (materials == null) return;
+
+        Map<String, List<String>> bounceChains = (Map<String, List<String>>) configData.get("bounceChains");
+        if (bounceChains == null) {
+            bounceChains = new HashMap<>();
+            configData.put("bounceChains", bounceChains);
+        }
+
+        for (Map<String, Object> matCfg : materials) {
+            Object m = matCfg.get("material");
+            Object lvl = matCfg.get("level");
+            if (m == null || lvl == null) continue;
+            String key = normalizeMaterialKey(m.toString());
+            if (!bounceChains.containsKey(key)) {
+                bounceChains.put(key, Collections.singletonList(lvl.toString()));
+                plugin.getLogger().info("Added default bounce chain for material " + key + " -> [" + lvl + "]");
+            }
+        }
+    }
+
     private void validateConfig() {
         // Validate levels
         Map<String, Map<String, Object>> levels = (Map<String, Map<String, Object>>) configData.get("levels");
@@ -201,17 +247,19 @@ public class ConfigManager {
             throw new IllegalArgumentException("Materials list cannot be empty");
         }
 
-        // Validate bounce chains for each material
+        // Validate bounce chains for each material, but do not fail hard; log and allow fallback.
         Map<String, List<String>> bounceChains = (Map<String, List<String>>) configData.get("bounceChains");
+        if (bounceChains == null) bounceChains = new HashMap<>();
         for (Map<String, Object> material : materials) {
-            String materialName = (String) material.get("material");
+            String materialName = normalizeMaterialKey(String.valueOf(material.get("material")));
             if (!bounceChains.containsKey(materialName)) {
-                throw new IllegalArgumentException("Bounce chain for material " + materialName + " not found");
+                getPlugin().getLogger().warning("Missing bounce chain for material " + materialName + "; will default to its initial level.");
+                continue;
             }
             List<String> chain = bounceChains.get(materialName);
             for (String levelName : chain) {
                 if (!levels.containsKey(levelName)) {
-                    throw new IllegalArgumentException("Level " + levelName + " in chain for material " + materialName + " not found in levels");
+                    getPlugin().getLogger().warning("Unknown level '" + levelName + "' in chain for material " + materialName + "; this step will be ignored.");
                 }
             }
         }
@@ -257,24 +305,39 @@ public class ConfigManager {
 
     public int getSafetyTimeoutTicks() {
         Map<String, Object> safety = getSafetyConfig();
-        return safety != null ? (int) safety.getOrDefault("timeoutTicks", 20) : 20;
+        if (safety == null) return 20;
+        // support both legacy root value and nested safeLandingMode.timeoutTicks
+        Object direct = safety.get("timeoutTicks");
+        if (direct instanceof Number) return ((Number) direct).intValue();
+        Object sl = safety.get("safeLandingMode");
+        if (sl instanceof Map) {
+            Object t = ((Map<?, ?>) sl).get("timeoutTicks");
+            if (t instanceof Number) return ((Number) t).intValue();
+        }
+        return 20;
     }
 
     public boolean getDebugLoggingEnabled() {
         Map<String, Object> debug = (Map<String, Object>) configData.get("debug");
-        return debug != null ? (boolean) debug.getOrDefault("loggingEnabled", false) : false;
+        // Align with keys used in config; treat any of these as enabling verbose logs
+        if (debug == null) return false;
+        Object v = debug.get("loggingEnabled");
+        if (v instanceof Boolean) return (Boolean) v;
+        Object ls = debug.get("logStartupSummary");
+        Object le = debug.get("logValidationErrors");
+        return Boolean.TRUE.equals(ls) || Boolean.TRUE.equals(le);
     }
 
     public String getListStatus() {
         StringBuilder status = new StringBuilder();
-        status.append("§6=== Spring Plugin Status ===\\n");
-        status.append("§eEnabled: §f").append(isEnabled()).append("\\n");
-        status.append("§eLocale: §f").append(configData.getOrDefault("locale", "en_US")).append("\\n");
+        status.append("§6=== Spring Plugin Status ===\n");
+        status.append("§eEnabled: §f").append(isEnabled()).append("\n");
+        status.append("§eLocale: §f").append(configData.getOrDefault("locale", "en_US")).append("\n");
 
         // Worlds configuration
         Map<String, Object> worlds = getWorldsConfig();
         if (worlds != null) {
-            status.append("§eWorlds Mode: §f").append(worlds.get("mode")).append("\\n");
+            status.append("§eWorlds Mode: §f").append(worlds.get("mode")).append("\n");
             Object worldsList = worlds.get("list");
             if (worldsList instanceof List) {
                 StringBuilder worldsStr = new StringBuilder();
@@ -284,65 +347,65 @@ public class ConfigManager {
                     }
                     worldsStr.append(world.toString());
                 }
-                status.append("§eWorlds List: §f").append(worldsStr.toString()).append("\\n");
+                status.append("§eWorlds List: §f").append(worldsStr.toString()).append("\n");
             } else {
-                status.append("§eWorlds List: §f").append(worldsList).append("\\n");
+                status.append("§eWorlds List: §f").append(worldsList).append("\n");
             }
         } else {
-            status.append("§eWorlds: §fNot configured\\n");
+            status.append("§eWorlds: §fNot configured\n");
         }
 
         // Region configuration
         Map<String, Object> region = getRegionConfig();
-        status.append("§eRequire Bounce Flag: §f").append(region.get("requireBounceFlag")).append("\\n");
+        status.append("§eRequire Bounce Flag: §f").append(region.get("requireBounceFlag")).append("\n");
 
         // Safety configuration
         Map<String, Object> safety = getSafetyConfig();
-        status.append("§eCancel Fall Damage: §f").append(safety.get("cancelFallDamage")).append("\\n");
-        status.append("§eSafe Landing Mode: §f").append(((Map<String, Object>) safety.get("safeLandingMode")).get("enabled")).append("\\n");
+        status.append("§eCancel Fall Damage: §f").append(safety.get("cancelFallDamage")).append("\n");
+        status.append("§eSafe Landing Mode: §f").append(((Map<String, Object>) safety.get("safeLandingMode")).get("enabled")).append("\n");
 
         // PlaceholderAPI configuration
         Map<String, Object> placeholderapi = (Map<String, Object>) configData.get("placeholderapi");
         if (placeholderapi != null) {
-            status.append("§ePlaceholderAPI Enabled: §f").append(placeholderapi.get("enabled")).append("\\n");
+            status.append("§ePlaceholderAPI Enabled: §f").append(placeholderapi.get("enabled")).append("\n");
             Map<String, Object> leaderboards = (Map<String, Object>) placeholderapi.get("leaderboards");
             if (leaderboards != null) {
-                status.append("§eLeaderboards Tracking: §f").append(leaderboards.get("track")).append("\\n");
-                status.append("§eTop Size: §f").append(leaderboards.get("topSize")).append("\\n");
+                status.append("§eLeaderboards Tracking: §f").append(leaderboards.get("track")).append("\n");
+                status.append("§eTop Size: §f").append(leaderboards.get("topSize")).append("\n");
             }
         }
 
         // Levels
         Map<String, Map<String, Object>> levels = getLevels();
-            status.append("§eLevels (").append(levels.size()).append("):\\n");
+            status.append("§eLevels (").append(levels.size()).append("):\n");
         for (String levelName : levels.keySet()) {
             Map<String, Object> level = levels.get(levelName);
             status.append("  §7- §f").append(levelName).append(": §7vertical=")
                   .append(level.get("verticalVelocity")).append(", horizontal=")
-                  .append(level.get("horizontalMultiplier")).append("\\n");
+                .append(level.get("horizontalMultiplier")).append("\n");
         }
 
         // Materials
         List<Map<String, Object>> materials = getMaterialsList();
-            status.append("§eMaterials (").append(materials.size()).append("):\\n");
+            status.append("§eMaterials (").append(materials.size()).append("):\n");
         for (Map<String, Object> material : materials) {
-            status.append("  §7- §f").append(material.get("material")).append(": §7initial=")
-                  .append(material.get("level")).append("\\n");
+            status.append("  §7- §f").append(normalizeMaterialKey(String.valueOf(material.get("material")))).append(": §7initial=")
+                .append(material.get("level")).append("\n");
         }
 
         // Bounce Chains
         Map<String, List<String>> bounceChains = getBounceChains();
-        status.append("§eBounce Chains:\\n");
+        status.append("§eBounce Chains:\n");
         for (String material : bounceChains.keySet()) {
             status.append("  §7- §f").append(material).append(": §7")
-                  .append(String.join(" → ", bounceChains.get(material))).append("\\n");
+                  .append(String.join(" → ", bounceChains.get(material))).append("\n");
         }
 
         // Debug
         Map<String, Object> debug = (Map<String, Object>) configData.get("debug");
         if (debug != null) {
-            status.append("§eLog Startup Summary: §f").append(debug.get("logStartupSummary")).append("\\n");
-            status.append("§eLog Validation Errors: §f").append(debug.get("logValidationErrors")).append("\\n");
+            status.append("§eLog Startup Summary: §f").append(debug.get("logStartupSummary")).append("\n");
+            status.append("§eLog Validation Errors: §f").append(debug.get("logValidationErrors")).append("\n");
         }
 
         return status.toString();

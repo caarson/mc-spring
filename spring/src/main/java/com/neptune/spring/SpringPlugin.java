@@ -20,21 +20,32 @@ public class SpringPlugin extends JavaPlugin {
     private StatsStore statsStore;
     
     @Override
+    public void onLoad() {
+        // Register WorldGuard flags during onLoad() - required for WG 7.0+
+        try {
+            if (getServer().getPluginManager().getPlugin("WorldGuard") != null) {
+                com.neptune.spring.integration.WorldGuardHook.registerFlags(this);
+                getLogger().info("WorldGuard detected - registering custom flags");
+            }
+        } catch (Exception e) {
+            getLogger().warning("Failed to register WorldGuard flags: " + e.getMessage());
+        }
+    }
+    
+    @Override
     public void onEnable() {
         // Initialize config manager first
         configManager = new ConfigManager(this);
         
         // Register command
-        getCommand("spring").setExecutor(new SpringCommand(configManager));
+        SpringCommand springCommand = new SpringCommand(configManager);
+        getCommand("spring").setExecutor(springCommand);
+        getCommand("spring").setTabCompleter(springCommand);
         
-        // Setup hooks for optional dependencies (WorldGuard, LuckPerms)
-        // Use try-catch to handle missing optional dependencies gracefully
-        try {
-            if (WorldGuardHook.isAvailable()) {
-                new WorldGuardHook(this);
-            }
-        } catch (NoClassDefFoundError e) {
-            getLogger().warning("WorldGuard not found, skipping integration");
+        // WorldGuard hook is already initialized in onLoad()
+        // Just log if it's available
+        if (com.neptune.spring.integration.WorldGuardHook.isAvailable()) {
+            getLogger().info("WorldGuard integration active");
         }
         
         try {

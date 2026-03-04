@@ -1,10 +1,13 @@
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+
 plugins {
     id("java")
     id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
 group = "com.neptune"
-version = "1.0"
+version = "1.0.1"
 
 repositories {
     mavenCentral()
@@ -32,7 +35,9 @@ tasks {
     }
     
     jar {
+        val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
         archiveBaseName.set("Spring")
+        archiveVersion.set("${project.version}-$timestamp")
         archiveClassifier.set("")
     }
     

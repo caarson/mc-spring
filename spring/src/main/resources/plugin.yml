@@ -2,12 +2,11 @@ name: Spring
 main: com.neptune.spring.SpringPlugin
 api-version: 1.21
 version: 1.0
-soft-dependencies:
-- PlaceholderAPI
+softdepend:
 - WorldGuard
+- PlaceholderAPI
 - LuckPerms
 commands:
   spring:
     description: "Spring Bounce Pad Plugin commands"
-    usage: "/spring [reload|list]"
-    permission: spring.admin
+    usage: "/spring help"

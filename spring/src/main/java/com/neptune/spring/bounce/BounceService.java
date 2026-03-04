@@ -23,7 +23,7 @@ public class BounceService implements Listener {
     private SafeLandingService safeLandingService;
     private ChainTracker chainTracker;
     private com.neptune.spring.storage.StatsStore statsStore;
-    private Map<UUID, Double> previousYVelocity = new HashMap<>();
+    private Map<UUID, Vector> previousVelocity = new HashMap<>();
     
     public BounceService(ConfigManager configManager, SafeLandingService safeLandingService, com.neptune.spring.storage.StatsStore statsStore) {
         this.configManager = configManager;
@@ -37,23 +37,32 @@ public class BounceService implements Listener {
         if (!configManager.isEnabled()) return;
         
         Player player = event.getPlayer();
+        
+        // Check WorldGuard region permissions if configured
+        Map<String, Object> regionConfig = configManager.getRegionConfig();
+        boolean requireFlag = regionConfig != null && (boolean) regionConfig.getOrDefault("requireBounceFlag", false);
+        
+        if (requireFlag && !com.neptune.spring.integration.WorldGuardHook.canBounceInRegion(player)) {
+            UUID playerId = player.getUniqueId();
+            Vector currentVelocity = player.getVelocity();
+            previousVelocity.put(playerId, currentVelocity.clone());
+            return;
+        }
+        
         UUID playerId = player.getUniqueId();
         Block blockUnderFeet = player.getLocation().subtract(0, 1, 0).getBlock();
         
-        // Get current and previous Y velocity
-        double currentYVel = player.getVelocity().getY();
-        Double prevYVel = previousYVelocity.get(playerId);
+        Vector currentVelocity = player.getVelocity();
+        Vector prevVelocity = previousVelocity.get(playerId);
+        double prevYVel = prevVelocity != null ? prevVelocity.getY() : 0.0;
         
-        // Update tracked velocity for next event
-        previousYVelocity.put(playerId, currentYVel);
-        
-        // Only trigger bounce if:
-        // 1. Player just landed (was falling/not on ground before, now on ground)
-        // 2. Previous Y velocity was negative (falling)
-        // 3. Current Y velocity is near zero or negative (just landed, not already bouncing up)
-        boolean justLanded = player.isOnGround() && prevYVel != null && prevYVel < -0.1 && currentYVel < 0.5;
+        // Trigger bounce if player was falling last tick (even slowly) and is now on the ground.
+        // Original threshold (-0.1) prevented bounces on materials that slow descent (e.g. honey).
+        double minLandingYVelocity = -0.02; // Allow gentle landings to still bounce
+        boolean justLanded = player.isOnGround() && prevVelocity != null && prevYVel < minLandingYVelocity;
         
         if (!justLanded) {
+            previousVelocity.put(playerId, currentVelocity.clone());
             return;
         }
         
@@ -63,11 +72,23 @@ public class BounceService implements Listener {
         // Find if the material is configured
         String configuredMaterial = null;
         for (Map<String, Object> materialConfig : materials) {
-            if (materialConfig.get("material").equals(materialName)) {
+            Object cfg = materialConfig.get("material");
+            if (cfg == null) continue;
+            String key = com.neptune.spring.config.ConfigManager.normalizeMaterialKey(cfg.toString());
+            // Compare using Bukkit Material equality to be robust to case/namespacing
+            Material cfgMat = Material.matchMaterial(key);
+            if (cfgMat != null && cfgMat == blockUnderFeet.getType()) {
+                configuredMaterial = cfgMat.name();
+                break;
+            }
+            // Fallback string compare (normalized)
+            if (key.equals(materialName)) {
                 configuredMaterial = materialName;
                 break;
             }
         }
+        
+        Vector velocityToStore = currentVelocity.clone();
         
         if (configuredMaterial != null) {
             // Get current chain level for this material
@@ -97,36 +118,31 @@ public class BounceService implements Listener {
             Vector velocity = player.getVelocity();
 
             // Compute incoming horizontal magnitude
-            double incomingHX = velocity.getX();
-            double incomingHZ = velocity.getZ();
+            double incomingHX = prevVelocity != null ? prevVelocity.getX() : 0.0;
+            double incomingHZ = prevVelocity != null ? prevVelocity.getZ() : 0.0;
             double incomingHorizontalMagnitude = Math.sqrt(incomingHX * incomingHX + incomingHZ * incomingHZ);
 
-            // Determine target horizontal magnitude. If incoming is zero, treat horizontalMultiplier as absolute speed.
             double targetHorizontalMagnitude = incomingHorizontalMagnitude * horizontalMultiplier;
-            if (incomingHorizontalMagnitude == 0.0) {
-                targetHorizontalMagnitude = horizontalMultiplier;
-            }
-
             Vector newHorizontal = new Vector(0, 0, 0);
 
-            if (anglePreservation && incomingHorizontalMagnitude > 0.0) {
-                // Preserve the incoming horizontal direction, scale magnitude
-                newHorizontal = new Vector(incomingHX, 0, incomingHZ).normalize().multiply(targetHorizontalMagnitude);
-            } else {
-                // Align horizontal to player's look direction (xz) and apply magnitude
-                Vector look = player.getLocation().getDirection();
-                Vector lookHoriz = new Vector(look.getX(), 0, look.getZ());
-                if (lookHoriz.length() > 0.0) {
-                    newHorizontal = lookHoriz.normalize().multiply(targetHorizontalMagnitude);
-                } else if (incomingHorizontalMagnitude > 0.0) {
-                    // fallback to incoming direction if look has no horizontal component
-                    newHorizontal = new Vector(incomingHX, 0, incomingHZ).normalize().multiply(targetHorizontalMagnitude);
+            if (incomingHorizontalMagnitude > 0.001 && targetHorizontalMagnitude > 0.0) {
+                Vector direction = new Vector(incomingHX, 0, incomingHZ).normalize();
+
+                if (!anglePreservation) {
+                    Vector look = player.getLocation().getDirection();
+                    Vector lookHoriz = new Vector(look.getX(), 0, look.getZ());
+                    if (lookHoriz.lengthSquared() > 0.001) {
+                        direction = lookHoriz.normalize();
+                    }
                 }
+
+                newHorizontal = direction.multiply(targetHorizontalMagnitude);
             }
 
             Vector newVelocity = new Vector(newHorizontal.getX(), verticalVelocity, newHorizontal.getZ());
             
             player.setVelocity(newVelocity);
+            velocityToStore = newVelocity.clone();
             
             // Play particles
             try {
@@ -169,6 +185,7 @@ public class BounceService implements Listener {
             // Reset chain if player steps off bounce material
             chainTracker.resetChain(player);
         }
+        previousVelocity.put(playerId, velocityToStore);
     }
     
     @EventHandler
@@ -178,9 +195,21 @@ public class BounceService implements Listener {
         Player player = event.getPlayer();
         if (event.isSneaking()) {
             Block blockUnderFeet = player.getLocation().subtract(0, 1, 0).getBlock();
-            String materialName = blockUnderFeet.getType().name();
-            
-            if (configManager.getMaterialsList().contains(materialName)) {
+            String current = blockUnderFeet.getType().name();
+
+            boolean isConfigured = false;
+            for (Map<String, Object> materialConfig : configManager.getMaterialsList()) {
+                Object cfg = materialConfig.get("material");
+                if (cfg == null) continue;
+                String key = com.neptune.spring.config.ConfigManager.normalizeMaterialKey(cfg.toString());
+                Material cfgMat = Material.matchMaterial(key);
+                if ((cfgMat != null && cfgMat == blockUnderFeet.getType()) || key.equals(current)) {
+                    isConfigured = true;
+                    break;
+                }
+            }
+
+            if (isConfigured) {
                 // Reset chain when sneaking
                 chainTracker.resetChain(player);
             }
